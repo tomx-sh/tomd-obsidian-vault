@@ -1,0 +1,30 @@
+name: Deploy website
+
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+permissions: {}
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Trigger Vercel deployment
+              env:
+                  VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+              run: |
+                  if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+                    echo "VERCEL_DEPLOY_HOOK_URL is not configured"
+                    exit 1
+                  fi
+
+                  curl \
+                    --fail-with-body \
+                    --silent \
+                    --show-error \
+                    --request POST \
+                    "$VERCEL_DEPLOY_HOOK_URL"
