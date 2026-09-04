@@ -1,0 +1,43 @@
+/* Obsidian Publish site name */
+.site-body-left-column-site-name,
+.site-header-text {
+  font-family: var(
+    --font-monospace,
+    ui-monospace,
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace
+  );
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+:root,
+body,
+.published-container {
+  text-underline-offset: 0.2em;
+  --font-text: var(--font-monospace);
+  --font-interface: var(--font-monospace);
+  --font-text-size: 14px;
+  --accent-h: 20.7;
+  --accent-s: 100%;
+  --accent-l: 50%;
+  --sidebar-left-background: var(--color-base-05);
+}
+
+.search-view-container .search-bar {
+  text-overflow: ellipsis;
+}
+
+.callout {
+  --list-marker-color: rgb(var(--callout-color));
+}
+
+/* Allow wide Mermaid diagrams to scroll horizontally. */
+.mermaid {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
