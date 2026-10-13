@@ -6,67 +6,61 @@ created: 2026-07-31
 # Running AI models locally
 #ai
 
-Short notes on hardware, models, and the settings that make local AI more responsive.
+Local AI performance depends on the model, quantization, runtime, and request settings. Measure both generation speed and the delay before the first token.
 
-> [!note]
-> Model names and results reflect testing in July 2026. Local AI changes quickly, so treat them as a shortlist rather than permanent recommendations.
+## Apple Silicon benchmark
 
-## Quick model picks
+Tested on **4 October 2026**: MacBook Pro M1 Pro, 32 GB unified memory, macOS 27.0.1. Magnitude version: 0.2.5.
 
-| Hardware                  | Models to try                                                      |
-| ------------------------- | ------------------------------------------------------------------ |
-| Raspberry Pi, 8 GB        | `qwen3:4b` (best tested result), `qwen3:1.7b`, `gemma4:e2b-it-qat` |
-| Raspberry Pi, 16 GB       | `qwen3:8b`, `gemma4:e4b-it-qat`, `gemma4:12b-it-qat`               |
-| M1 Pro MacBook Pro, 32 GB | `gemma4:12b-mlx`                                                   |
-| M4 MacBook Air, 32 GB     | `gemma4:e4b-mlx`                                                   |
-| HP EliteDesk G4 AMD 8GB   | `gemma4:e2b-it-qat`                                                |
+Each configuration received the same prompt: “Write a detailed essay about the history of computing.” Temperature was 0, with a 256-token output limit, one discarded warmup, and three measured runs. Only one model was loaded at a time. Values below are medians; Ollama and LM Studio results are from earlier runs on the same machine.
 
-For a dedicated workstation, AMD Threadripper Pro on WRX90 is one high-end CPU/platform option. Sipeed's [K3](https://sipeed.com/k3) is another piece of dedicated hardware worth investigating.
+| Runtime | Model | Generation (tokens/s) | First token (s) |
+|---|---|---:|---:|
+| Magnitude | Gemma 4 26B-A4B Q4 QAT, GGUF | **31.55** | 0.228 |
+| Ollama | `gemma4:12b-mlx` | 20.71 | 0.061 |
+| Ollama | `qwen3.8:27b-mlx` | 11.26 | 0.271 |
+| LM Studio | `qwen/qwen3.8-27b` | 10.62 | 2.047 |
+| LM Studio | `qwen3.8-27b-uncensored-mlx` | 10.66 | 2.003 |
+| LM Studio | `qwen2.5-0.5b-instruct-mlx` | 244.58 | 0.103 |
 
-## Apple Silicon
+Magnitude completed 256 tokens in **8.37 seconds**, with measured generation rates of 31.54–31.86 tokens/s. Its Gemma configuration was 1.52× faster than the Ollama Gemma 12B configuration.
 
-### Ollama
+These results compare complete configurations, not runtime efficiency or answer quality. Models and quantization differ; Magnitude used 256K context, while the earlier runs requested 8K. Some baseline runs generated hidden reasoning; Magnitude generated visible text only.
 
-Ollama currently gives the best tested results on a MacBook Pro with:
+Magnitude and LM Studio timings come from streamed responses. Ollama uses server timings, with first-token latency approximated by load plus prompt-processing time. These short-prompt results do not measure long-context or agent performance.
 
-- `qwen3.6:35b-a3b-coding-nvfp4` for coding;
-- `gemma4:26b-a4b-it-qat` as a strong quantized option;
-- `gemma4:31b-it-qat` when memory permits;
-- smaller Qwen or Gemma variants when fast responses matter more than capability.
+Magnitude's local OpenAI-compatible API base URL:
 
-Gemma 4 QAT variants reduce memory usage while preserving much of the model quality. Available sizes include `e2b`, `e4b`, `12b`, `26b-a4b`, and `31b`.
+```text
+http://127.0.0.1:10100/inference/v1
+```
 
-### MLX and oMLX
+## Earlier hardware notes
 
-Use **MLX 4-bit** models rather than GGUF files with oMLX. Candidates include:
+Model candidates recorded in July 2026:
 
-- `Qwen3-Coder-30B-A3B-Instruct-4bit` for coding and agents;
-- a Qwen 35B A3B 4-bit model for general reasoning;
-- `Qwen3.5-9B-4bit` as a faster fallback.
+| Hardware | Models |
+|---|---|
+| Raspberry Pi, 8 GB | `qwen3:4b`, `qwen3:1.7b`, `gemma4:e2b-it-qat` |
+| Raspberry Pi, 16 GB | `qwen3:8b`, `gemma4:e4b-it-qat`, `gemma4:12b-it-qat` |
+| M4 MacBook Air, 32 GB | `gemma4:e4b-mlx` |
+| [[hp-elitedesk-g4-ubuntu\|HP EliteDesk G4 AMD]], 8 GB | `gemma4:e2b-it-qat` |
 
-In practice, oMLX produced less satisfactory results than Ollama in these tests.
+Earlier coding trials favored `qwen3.6:35b-a3b-coding-nvfp4` in Ollama. oMLX trials were less satisfactory; no timed comparison is included here.
 
-## Making OpenCode responsive with Ollama
+Dedicated hardware options to investigate: AMD Threadripper Pro on WRX90 and [Sipeed K3](https://sipeed.com/k3).
 
-Tests on a fanless MacBook Air M4 with 24 GB of unified memory found that slow visible responses did **not** come primarily from decoding speed.
+## Reducing agent latency
 
-The largest sources of delay were:
+Earlier OpenCode tests on a MacBook Air M4 with 24 GB found delays from hidden reasoning, automatic title generation, large prompts, and competing requests that disrupted prompt-cache reuse.
 
-- hidden reasoning before the visible answer;
-- automatic conversation-title generation on the first turn;
-- OpenCode's large system prompt and tool definitions;
-- prompt-cache invalidation when requests competed with each other.
+The useful changes were:
 
-The changes with the greatest impact were:
+- Disable automatic title generation and make reasoning optional.
+- Keep one model loaded and serialize requests.
+- Limit working context and enable conversation compaction.
 
-- disable automatic title generation;
-- disable reasoning by default and enable it only for difficult tasks;
-- keep a single model loaded;
-- allow only one parallel Ollama request;
-- cap the working context instead of using the model's theoretical maximum;
-- enable automatic compaction and pruning for long conversations.
-
-Suggested OpenCode settings:
+OpenCode settings used in those tests:
 
 ```json
 {
@@ -81,7 +75,7 @@ Suggested OpenCode settings:
 }
 ```
 
-Suggested Ollama environment:
+Ollama environment:
 
 ```text
 OLLAMA_KEEP_ALIVE=30m
@@ -89,41 +83,10 @@ OLLAMA_MAX_LOADED_MODELS=1
 OLLAMA_NUM_PARALLEL=1
 ```
 
-A practical default budget on a 24 GB Mac is:
+That setup used a 32,768-token context and a 4,096-token output limit. Disabling title generation reduced visible first-token latency from roughly 5–10 seconds to under one second on repeated Qwen 2B requests. Stable cache reuse mattered more than decode speed.
 
-- context: 32,768 tokens;
-- maximum output: 4,096 tokens;
-- reasoning: off by default, with a selectable high-reasoning variant.
+## Related tools
 
-In the measured OpenCode setup, disabling title generation reduced visible time to first token from roughly **5–10 seconds** to **under one second** on repeated Qwen 2B requests. The improvement came from stable prompt-cache reuse, not faster token decoding.
-
-## Useful checks
-
-```bash
-# Show resident models
-ollama ps
-
-# Inspect Ollama's metadata for a model
-curl -s http://127.0.0.1:11434/api/show \
-  -d '{"model":"qwen3.5:2b-mlx"}' | python3 -m json.tool
-
-# Inspect OpenCode's merged configuration
-opencode debug config
-
-# Watch cache and timing information
-tail -f ~/.ollama/logs/server.log
-```
-
-## Other local components
-
-- Speech: [`blaizy/mlx-audio`](https://github.com/blaizy/mlx-audio) and Nemotron 3.5 ASR
-- Headless browsing: [`h4ckf0r0day/obscura`](https://github.com/h4ckf0r0day/obscura)
+- Speech: [`blaizy/mlx-audio`](https://github.com/blaizy/mlx-audio)
+- Headless browser: [`obscura`](https://github.com/h4ckf0r0day/obscura)
 - Fine-tuning: [Gemma Trainer walkthrough](https://dev.to/googleai/master-local-fine-tuning-with-gemma-trainer-3ipp)
-
-## Takeaways
-
-- Start with a 4B model on an 8 GB Raspberry Pi and an 8B–12B model on a 16 GB Pi.
-- On Apple Silicon, test Ollama before investing time in alternative runtimes.
-- For agent use, prompt processing and cache reuse can matter more than raw decode speed.
-- Keep reasoning optional: small models can spend their entire output budget on hidden thinking.
-- Use conservative context limits; advertised maximum context is rarely the best everyday setting.
